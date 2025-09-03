@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
-<title>Multicampus 코스 러너 — v27 (Global Tap + 1-Line HUD)</title>
+<title>Multicampus 코스 러너 — v28 (Header 1-Line + Full-Height Backdrop)</title>
 <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -14,6 +14,7 @@
     --panel:#fff; --good:#0fa958; --bad:#e53935; --gold:#f5b700;
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --groundH: 56px; /* 캔버스 바닥 높이와 싱크 */
   }
   *{box-sizing:border-box}
   html,body{
@@ -22,40 +23,78 @@
     -webkit-text-size-adjust:100%;
     overscroll-behavior-y:none;
   }
-  .wrap{min-height:100svh;min-height:100dvh;display:flex;flex-direction:column;
-    padding-bottom:var(--safe-bottom);background:var(--bg);}
+  .wrap{
+    min-height:100svh;min-height:100dvh;display:flex;flex-direction:column;
+    padding-bottom:var(--safe-bottom);
+    /* ▼ 게임 배경을 캔버스 밖까지 확장 */
+    background:
+      linear-gradient(#eaf3ff 0%, #fefefe 40%, #fefefe 100%);
+  }
+
+  /* ===== Header: 1열 고정, 스크롤 없음 ===== */
   header{
-    position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+    position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:.75rem;
     padding:calc(.5rem + var(--safe-top)/2) 1rem .5rem 1rem;
     background:rgba(255,255,255,.94);backdrop-filter:saturate(140%) blur(6px);
     border-bottom:1px solid #e9e9ee;
-    overflow:hidden; /* ★ NEW: 헤더 자체는 숨김, HUD가 가로 스크롤 */
   }
-  .logo{font-weight:800;letter-spacing:.2px;font-size:1.1rem;line-height:1;position:relative;color:var(--ink);cursor:pointer;user-select:none;white-space:nowrap}
+  .logo{
+    flex:0 1 auto; min-width:0;
+    font-weight:800;letter-spacing:.2px;font-size:1.1rem;line-height:1;color:var(--ink);
+    cursor:pointer;user-select:none;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;
+  }
   .logo .i{position:relative;display:inline-block}
   .logo .i .dot{position:absolute;left:50%;transform:translateX(-50%);width:.45em;height:.45em;border-radius:50%;background:var(--accent);top:-.18em}
 
-  /* ★ NEW: HUD 1열 고정 + 가로 스크롤 */
   .hud{
-    display:flex;align-items:center;gap:.35rem .5rem;
-    flex-wrap:nowrap;               /* 1열 고정 */
-    overflow-x:auto; overflow-y:hidden;
-    -webkit-overflow-scrolling:touch;
-    scroll-snap-type:x proximity;
-    scrollbar-width:none;
-    max-width:70vw;                 /* 로고 옆에서 1열 유지 */
-    padding-bottom:2px;
+    flex:1 1 auto; min-width:0; /* 남은 공간을 모두 사용 */
+    display:flex; align-items:center; gap:.4rem;
+    flex-wrap:nowrap; justify-content:flex-end; /* 1열 고정 + 오른쪽 정렬 */
+    overflow:hidden; /* 스크롤 없음 */
   }
-  .hud::-webkit-scrollbar{display:none}
-  .pill{display:inline-flex;align-items:center;gap:.45rem;padding:.28rem .5rem;border-radius:999px;background:var(--panel);border:1px solid #eee;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .pill{
+    flex:0 0 auto;
+    display:inline-flex;align-items:center;gap:.4rem;
+    padding:.34rem .56rem;border-radius:999px;background:var(--panel);border:1px solid #eee;
+    font-variant-numeric:tabular-nums;white-space:nowrap
+  }
   .pill small{font-weight:600;color:var(--muted)}
-  .btn{appearance:none;border:1px solid #ddd;background:var(--panel);padding:.4rem .6rem;border-radius:.6rem;font-weight:700;cursor:pointer;white-space:nowrap}
+  .btn{
+    flex:0 0 auto; appearance:none;border:1px solid #ddd;background:var(--panel);
+    padding:.38rem .56rem;border-radius:.6rem;font-weight:700;cursor:pointer;white-space:nowrap
+  }
   .btn:active{transform:translateY(1px)}
   .btn.primary{border-color:var(--accent);outline:2px solid rgba(255,122,0,.12)}
 
-  .canvas-box{position:relative;flex:1;display:flex;align-items:center;justify-content:center;padding:10px}
+  /* 작은 화면: 라벨 숨기고 간격 최소화 → 1열 유지 */
+  @media (max-width: 640px){
+    .pill small{display:none}          /* 점수/콤보/라이프 같은 라벨 텍스트 숨김 */
+    .hud{gap:.3rem}
+    .pill{padding:.28rem .46rem}
+    .btn{padding:.32rem .48rem}
+    .logo{font-size:1.0rem}
+  }
+  @media (max-width: 380px){
+    .logo{font-size:.98rem}
+    .hud{gap:.25rem}
+    .pill{padding:.24rem .4rem}
+    .btn{padding:.28rem .42rem}
+  }
+
+  /* ===== Canvas 영역 ===== */
+  .canvas-box{
+    position:relative;flex:1;display:flex;align-items:center;justify-content:center;padding:10px;
+  }
+  /* 바닥을 wrap 배경 위에도 표시(캔버스 아래로 연장) */
+  .canvas-box::after{
+    content:""; position:absolute; left:0; right:0; bottom:0;
+    height:var(--groundH);
+    background:#e3e7ef; border-top:1px solid #e3e7ef;
+    pointer-events:none;
+  }
   canvas{
-    background:linear-gradient(#eaf3ff 0%, #fefefe 40%);
+    /* 캔버스는 투명 → 바깥 배경이 이어 보임 */
+    background:transparent;
     width:100%; max-width:920px; height:auto; aspect-ratio:16/9;
     border-radius:12px;border:1px solid #e3e7ef;touch-action:none;
     image-rendering:auto; transform:translateZ(0); backface-visibility:hidden;
@@ -88,15 +127,11 @@
   .rankNo{width:56px;text-align:center;font-weight:800}
   .cellRight{text-align:right}
   .muted{color:#777}
-  @media (max-width: 380px){
-    .char-btn{width:42px;height:42px;font-size:24px}
-    .hud{max-width:64vw} /* 초소형 기기에서도 1열 유지 */
-  }
   @media (prefers-reduced-motion: reduce){ .toast,.combo-pop{transition:none} }
 </style>
 </head>
 <body>
-<div class="wrap" id="tapAny">  <!-- ★ NEW: 전역 탭 캡처용 아이디 -->
+<div class="wrap" id="tapAny">
   <header id="appHeader">
     <div id="homeLogo" class="logo" role="button" tabindex="0" title="초기 화면으로 이동">
       <span class="word">mult<span class="i">ı<span class="dot" aria-hidden="true"></span></span>campus</span>
@@ -182,7 +217,7 @@
     <div id="comboPop" class="combo-pop">COMBO x2!</div>
   </div>
 
-  <footer>© multicampus arcade — v27: Global Tap + 1-Line HUD</footer>
+  <footer>© multicampus arcade — v28: Header 1-Line + Full-Height Backdrop</footer>
 </div>
 
 <script>
@@ -198,12 +233,11 @@
   const canvas=$('#game'); const ctx=canvas.getContext('2d',{alpha:true});
   const header=$('#appHeader');
 
-  // 성능 힌트
   const deviceMem = navigator.deviceMemory || 4;
   const cores = navigator.hardwareConcurrency || 4;
   const lowEnd = (deviceMem <= 3) || (cores <= 4);
 
-  // ===== 픽셀 퍼펙트 사이징 =====
+  /* ===== 픽셀 퍼펙트 사이징 ===== */
   let headerH=0;
   new ResizeObserver(()=>{ headerH = Math.ceil(header.getBoundingClientRect().height); fitCanvas(); }).observe(header);
 
@@ -217,7 +251,7 @@
 
   function fitCanvas(){
     const sysDpr = window.devicePixelRatio || 1;
-    const dpr = Math.min(3, Math.max(1, Math.round(sysDpr))); // 1/2/3 정수 고정
+    const dpr = Math.min(3, Math.max(1, Math.round(sysDpr)));
     const aspect = 16/9;
     const {width, avail} = metric();
     const padding=20;
@@ -244,7 +278,7 @@
   }
   fitCanvas(); bindViewportEvents();
 
-  // ===== Game Core =====
+  /* ===== Game Core ===== */
   let mute=true; let audioCtx=null;
   function beep(freq=440, dur=0.07, type='sine', gain=0.06){
     if(mute) return;
@@ -300,9 +334,9 @@
   }
 
   const DIFF_PRESETS = {
-    easy:   { label:'하', speedSlope:0.32, speedMax:8.2, diffSlope:0.028, diffMax:0.8, burst:0.08, coinMul: lowEnd?1.3:1.6, heartMul:0.8, starMul:0.9, aggression: lowEnd?0.5:0.6 },
-    normal: { label:'중', speedSlope:0.42, speedMax:9.8, diffSlope:0.035, diffMax:1.0, burst:0.11, coinMul: lowEnd?2.0:2.5, heartMul:4.0, starMul:5.0, aggression: lowEnd?0.85:1.0 },
-    hard:   { label:'상', speedSlope:0.66, speedMax:11.5, diffSlope:0.055, diffMax:1.6, burst:0.20, coinMul: lowEnd?3.0:3.5, heartMul:6.0, starMul:7.0, aggression: lowEnd?1.3:1.5 },
+    easy:   { label:'하', speedSlope:0.32, speedMax:8.2, diffSlope:0.028, diffMax:0.8, burst:0.08, coinMul: (navigator.hardwareConcurrency||4)<=4?1.3:1.6, heartMul:0.8, starMul:0.9, aggression: (navigator.hardwareConcurrency||4)<=4?0.5:0.6 },
+    normal: { label:'중', speedSlope:0.42, speedMax:9.8, diffSlope:0.035, diffMax:1.0, burst:0.11, coinMul: (navigator.hardwareConcurrency||4)<=4?2.0:2.5, heartMul:4.0, starMul:5.0, aggression: (navigator.hardwareConcurrency||4)<=4?0.85:1.0 },
+    hard:   { label:'상', speedSlope:0.66, speedMax:11.5, diffSlope:0.055, diffMax:1.6, burst:0.20, coinMul: (navigator.hardwareConcurrency||4)<=4?3.0:3.5, heartMul:6.0, starMul:7.0, aggression: (navigator.hardwareConcurrency||4)<=4?1.3:1.5 },
   };
   function getPreset(){ return DIFF_PRESETS[selectedDiff] || DIFF_PRESETS.normal; }
   let running=false, paused=false, over=false;
@@ -322,7 +356,7 @@
 
   let obsTimer=0, coinTimer=0, heartTimer=0, starTimer=0;
 
-  // ===== 충돌 함수(코인 원 vs 장애물 사각) =====
+  function rectsOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
   function circleRectOverlap(c, r){
     const closestX = Math.max(0, Math.min(c.x - r.x, r.w)) + r.x;
     const closestY = Math.max(0, Math.min(c.y - r.y, r.h)) + r.y;
@@ -330,7 +364,7 @@
     return (dx*dx + dy*dy) <= (c.r*c.r);
   }
 
-  // ===== 스폰 (겹침 방지 포함) =====
+  /* ===== 스폰(겹침 방지) ===== */
   function spawnObstacle(){
     const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H;
     const df = diffFactor(time); const p = getPreset(); const ag = p.aggression;
@@ -401,11 +435,10 @@
   function spawnHeart(){ const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H; const y=groundY - rand(90, 190); hearts.push({x:canvas.width/window.devicePixelRatio + 42, y, r:16, collected:false}); }
   function spawnStar(){ const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H; const y=groundY - rand(110, 200); stars.push({x:canvas.width/window.devicePixelRatio + 52, y, r:16, t:0, collected:false}); }
 
-  // ===== 입력 (전역 탭) =====
+  /* ===== 입력 ===== */
   function doJump(){ if(!running || paused || over) return; if(player.jumpsLeft>0){ player.vy=-10.4; player.onGround=false; player.jumpsLeft--; beep(560,.07,'square',.05);} }
   function togglePause(){ if(!running || over) return; paused=!paused; pauseBtn.textContent = paused ? '▶️' : '⏸️'; }
 
-  // 기존 캔버스 입력
   window.addEventListener('keydown', e=>{
     if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault(); doJump();}
     if(e.code==='KeyP'){togglePause();}
@@ -413,15 +446,13 @@
   canvas.addEventListener('pointerdown', e=>{ e.preventDefault(); doJump(); }, {passive:false});
   canvas.addEventListener('touchmove', e=>{ e.preventDefault(); }, {passive:false});
 
-  // ★ NEW: 화면 어디나 탭 → 점프 (UI/입력/버튼 제외)
+  // 화면 어디 탭해도 점프 (버튼/입력/패널 제외)
   const tapAny = document.getElementById('tapAny');
   function isInteractive(target){
     return target.closest('.btn,.panel,button,input,textarea,select,a,[role="button"],.hud');
   }
   tapAny.addEventListener('pointerdown', (e)=>{
-    // 시작/게임오버 오버레이 패널을 누른 경우는 무시 (버튼 우선)
     if(isInteractive(e.target)) return;
-    // 배경 탭으로 스크롤·더블탭 확대를 막고 점프
     e.preventDefault();
     doJump();
   }, {passive:false});
@@ -430,14 +461,12 @@
   pauseBtn.addEventListener('click', togglePause, {passive:true});
   muteBtn.addEventListener('click', ()=>{ mute=!mute; muteBtn.textContent = mute ? '🔇' : '🔊'; muteBtn.setAttribute('aria-pressed', (!mute).toString()); if(!mute) beep(700,.05,'sine',.04); }, {passive:true});
 
-  function rectsOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
-
-  // ===== Draw =====
+  /* ===== 렌더링 ===== */
   function draw(){
     const W=canvas.width/window.devicePixelRatio, H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H;
     ctx.clearRect(0,0,W,H);
 
-    // 배경 선 (스냅)
+    // 배경 선 (캔버스 내부)
     ctx.globalAlpha=.08;
     for(let i=0;i<6;i++){
       ctx.fillStyle='#2a7cf7';
@@ -446,7 +475,7 @@
     }
     ctx.globalAlpha=1;
 
-    // 지면
+    // 지면(캔버스 내부) — wrap의 바닥 연장과 자연스럽게 이어짐
     ctx.fillStyle='#e3e7ef'; ctx.fillRect(0, groundY, W, GROUND_H);
     ctx.fillStyle='#cfd6e3';
     for(let x=0;x<W;x+=24){
@@ -490,7 +519,7 @@
   function showToast(msg){ toastEl.textContent=msg; toastEl.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>toastEl.classList.remove('show'),1400); }
   function showCombo(){ comboPopEl.textContent=`COMBO x${combo}!`; comboPopEl.classList.add('show'); clearTimeout(showCombo._t); showCombo._t=setTimeout(()=>comboPopEl.classList.remove('show'),800); }
 
-  // 랭킹
+  /* ===== 랭킹 ===== */
   const LB_KEY='mc_runner_lb_v1';
   function readLB(){ try{ return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); }catch(e){ return []; } }
   function writeLB(arr){ localStorage.setItem(LB_KEY, JSON.stringify(arr)); }
@@ -514,13 +543,14 @@
     saveToLB(entry); lbSavedNote.style.display='block'; renderLBMini(lbMini); renderLBTable(lbTable);
   }, {passive:true});
 
+  /* ===== 게임 루프 ===== */
   function reset(){
     const p=getPreset();
     running=false; paused=false; over=false; score=0; combo=1; time=0; speed=baseSpeed;
     lives=3; invulHit=0; invulPower=0; livesHUD(); shieldHUD();
     const H=canvas.height/window.devicePixelRatio; player.y = H - GROUND_H - player.h; player.vy=0; player.onGround=true; player.jumpsLeft=2; player.blink=0; player.facing=1;
     obstacles.length=0; coins.length=0; hearts.length=0; stars.length=0; updateHUD();
-    obsTimer=0; coinTimer=0; heartTimer = nextHeartTimer()*Math.max(0.6,p.heartMul); starTimer  = nextStarTimer()*Math.max(0.6,p.starMul); diffLabel.textContent = p.label;
+    obsTimer=0; coinTimer=0; heartTimer = (8 + Math.random()*10)*Math.max(0.6,p.heartMul); starTimer  = (10 + Math.random()*10)*Math.max(0.6,p.starMul); diffLabel.textContent = p.label;
   }
   function startGame(){ startOverlay.style.display='none'; reset(); running=true; pauseBtn.textContent='⏸️'; fitCanvas(); }
   function restartGame(){ gameOverOverlay.style.display='none'; reset(); running=true; pauseBtn.textContent='⏸️'; fitCanvas(); }
@@ -555,8 +585,8 @@
       obsTimer = clamp(0.28, burst, 3.2);
     }
     if(coinTimer<=0){ spawnCoin(); coinTimer=(1.2 + Math.random()*0.9) * p.coinMul * lognorm(0.30) / Math.pow(df,0.25); }
-    if(heartTimer<=0){ spawnHeart(); heartTimer = nextHeartTimer()*Math.max(0.6,p.heartMul); }
-    if(starTimer<=0){ spawnStar(); starTimer = nextStarTimer()*Math.max(0.6,p.starMul); }
+    if(heartTimer<=0){ spawnHeart(); heartTimer = (8 + Math.random()*10)*Math.max(0.6,p.heartMul); }
+    if(starTimer<=0){ spawnStar(); starTimer = (10 + Math.random()*10)*Math.max(0.6,p.starMul); }
 
     for(let i=obstacles.length-1;i>=0;i--){
       const o=obstacles[i]; if(o.type==='float'){ o.t=(o.t||0)+dt*o.s; o.y += Math.sin(o.t)*0.7; } o.x -= speed;
