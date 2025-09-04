@@ -3,7 +3,13 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"/>
-<title>Multicampus 코스 러너 — v29 (Hotfix + Error Catcher)</title>
+<title>Multicampus 코스 러너 — v32 (LTS · Hardened)</title>
+
+<!-- iOS standalone hint (safe) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Course Runner">
+
 <style>
   :root{
     --bg:#f7f7f8; --ink:#111; --muted:#666; --accent:#ff7a00; --panel:#fff;
@@ -37,7 +43,6 @@
   @media (pointer:coarse){ canvas{border:none;border-radius:0;max-width:100vw} }
   @supports not (aspect-ratio: 16/9){ canvas{height:auto}}
 
-  /* Overlays */
   .overlay{pointer-events:none;position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:14px}
   .panel{pointer-events:auto;background:rgba(255,255,255,.96);border:1px solid #e5e7ee;border-radius:14px;padding:16px;max-width:min(92vw,720px);text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.06)}
   h1{margin:.2rem 0 .6rem;font-size:clamp(1.05rem, 2.8vw, 1.35rem)}
@@ -60,12 +65,6 @@
   .float-btn{appearance:none;border:1px solid #e3e3ea;background:rgba(255,255,255,.9);backdrop-filter:blur(6px);border-radius:999px;padding:.35rem .6rem;font-weight:800}
 
   .touch-layer{position:absolute;inset:0;pointer-events:auto;touch-action:none}
-
-  /* Error catcher */
-  .error-overlay{position:fixed;z-index:9999;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);}
-  .error-overlay .box{max-width:min(92vw,720px);background:#fff;border-radius:12px;border:1px solid #e3e3ea;padding:14px}
-  .error-overlay h2{margin:0 0 8px 0;font-size:1.1rem}
-  .error-overlay pre{white-space:pre-wrap;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;background:#f7f7f8;border:1px solid #eee;padding:8px;border-radius:8px;max-height:40vh;overflow:auto}
 </style>
 </head>
 <body>
@@ -100,7 +99,7 @@
     <div id="startOverlay" class="overlay">
       <div class="panel">
         <h1>코스 러너 — 캐릭터·난이도 선택</h1>
-        <div class="tips">모바일은 <b>📱 전면</b>을 누르면 화면이 더 크게 보입니다. 화면 아무 곳이나 탭해서 점프!</div>
+        <div class="tips">모바일은 화면 아무 곳이나 탭해서 점프! 상단 <b>📱 전면</b>으로 더 크게 볼 수 있어요.</div>
         <div class="char-grid" role="group" aria-label="캐릭터 선택"></div>
         <div class="diff-row" role="group" aria-label="난이도 선택">
           <button class="diff-btn" data-diff="easy" aria-pressed="false">난이도</button>
@@ -109,7 +108,6 @@
         </div>
         <div class="btn-row" style="margin-top:10px">
           <button class="btn primary" id="startBtn">▶️ 시작하기</button>
-          <button class="btn" id="enterImmersiveBtn">📱 전면 시작</button>
         </div>
       </div>
     </div>
@@ -126,17 +124,9 @@
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- Error catcher overlay -->
-<div id="errOL" class="error-overlay" role="dialog" aria-modal="true">
-  <div class="box">
-    <h2>⚠️ 실행 오류를 감지했어요</h2>
-    <pre id="errMsg">알 수 없는 오류</pre>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
-      <button id="errClose" class="btn">닫기</button>
-    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="comboPop" class="combo-pop">COMBO x2!</div>
   </div>
 </div>
 
@@ -144,83 +134,78 @@
 (()=>{
   'use strict';
   const $=s=>document.querySelector(s);
-  const canvas=$('#game'), ctx=canvas.getContext('2d',{alpha:true});
+  const canvas=$('#game'); const ctx=canvas?canvas.getContext('2d',{alpha:true}):null;
+  if(!canvas || !ctx){ alert('캔버스를 초기화하지 못했습니다. 다른 브라우저로 시도하거나 보안 설정을 확인해주세요.'); return; }
   const header=$('#appHeader');
   const touchLayer=$('#touchLayer');
-  const errOL=$('#errOL'), errMsg=$('#errMsg'), errClose=$('#errClose');
 
-  // ===== Error catcher =====
-  function showError(e){ try{ errMsg.textContent = (e && e.message) ? (e.message + (e.filename?`\\n${e.filename}:${e.lineno}:${e.colno}`:'')) : String(e); }catch(_){ errMsg.textContent=String(e); } errOL.style.display='flex'; }
-  window.addEventListener('error', (e)=>{ showError(e.error||e.message||e); });
-  window.addEventListener('unhandledrejection', (e)=>{ showError(e.reason||e); });
-  errClose.addEventListener('click', ()=>{ errOL.style.display='none'; });
-
-  // ===== Mobile detection & sprite scale =====
-  const isCoarse=()=> (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) || (Math.min(screen.width, screen.height) <= 820);
-  let MOBILE_SCALE = isCoarse()? 0.82 : 1.0;
+  // ===== Mobile detection =====
+  const isCoarse=()=> { try{ return (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) || (Math.min(screen.width, screen.height) <= 820); }catch(_){ return true; } };
+  let MOBILE_SCALE = isCoarse()? 0.86 : 1.0;
   let immersive=false;
 
-  // ===== Responsive sizing =====
+  // ===== Responsive sizing (guarded) =====
   let headerH=0;
-  new ResizeObserver(()=>{ headerH = Math.ceil(header.getBoundingClientRect().height); fitCanvas(); }).observe(header);
+  try{
+    if('ResizeObserver' in window){
+      new ResizeObserver(()=>{ headerH = Math.ceil(header.getBoundingClientRect().height); fitCanvas(); }).observe(header);
+    }else{
+      headerH = Math.ceil(header.getBoundingClientRect().height);
+      window.addEventListener('resize', ()=>setTimeout(fitCanvas,0));
+    }
+  }catch(_){}
   function fitCanvas(){
-    const dpr = Math.min(window.devicePixelRatio||1, 3);
-    const aspect = 16/9;
-    const vv = (window.visualViewport && window.visualViewport.height) ? window.visualViewport.height : window.innerHeight;
-    const safeBottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('env(safe-area-inset-bottom, 0px)')) || 0;
-    const hiddenHeader = document.body.classList.contains('immersive');
-    const topSpace = hiddenHeader ? 0 : headerH;
-    const avail = Math.max(220, vv - topSpace - 6 - safeBottom);
-    const width = document.documentElement.clientWidth || window.innerWidth;
-    let cssW = Math.min(width, 980);
-    let cssH = Math.round(cssW/aspect);
-    if(cssH > avail){ cssH = Math.max(180, Math.floor(avail)); cssW = Math.round(cssH*aspect); }
-    canvas.style.width = cssW+'px'; canvas.style.height = cssH+'px';
-    canvas.width = Math.round(cssW*dpr); canvas.height = Math.round(cssH*dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
+    try{
+      const dpr = Math.min(window.devicePixelRatio||1, 2.5);
+      const aspect = 16/9;
+      const vv = (window.visualViewport && window.visualViewport.height) ? window.visualViewport.height : window.innerHeight;
+      const safeBottom = 0;
+      const hiddenHeader = document.body.classList.contains('immersive');
+      const topSpace = hiddenHeader ? 0 : headerH;
+      const avail = Math.max(220, vv - topSpace - 6 - safeBottom);
+      const width = document.documentElement.clientWidth || window.innerWidth || 960;
+      let cssW = Math.min(width, 980);
+      let cssH = Math.round(cssW/aspect);
+      if(cssH > avail){ cssH = Math.max(180, Math.floor(avail)); cssW = Math.round(cssH*aspect); }
+      canvas.style.width = cssW+'px'; canvas.style.height = cssH+'px';
+      canvas.width = Math.round(cssW*dpr); canvas.height = Math.round(cssH*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+    }catch(_){}
   }
   fitCanvas();
-  const vfHandler=()=>fitCanvas();
-  if(window.visualViewport){
-    visualViewport.addEventListener('resize', vfHandler);
-    visualViewport.addEventListener('scroll', vfHandler);
-  }
-  window.addEventListener('resize', vfHandler);
-  window.addEventListener('orientationchange', ()=> setTimeout(vfHandler, 120));
+  try{
+    if(window.visualViewport){
+      visualViewport.addEventListener('resize', fitCanvas);
+      visualViewport.addEventListener('scroll', fitCanvas);
+    }
+    window.addEventListener('resize', fitCanvas);
+    window.addEventListener('orientationchange', ()=> setTimeout(fitCanvas, 120));
+  }catch(_){}
 
-  // ===== Touch layer: tap anywhere to jump =====
-  let lastJumpAt=0;
-  function handleJump(e){ e.preventDefault(); const now=performance.now(); if(now-lastJumpAt<100) return; lastJumpAt=now; doJump(); }
-  ['pointerdown','touchstart','mousedown'].forEach(ev=>{
-    touchLayer.addEventListener(ev, handleJump, {passive:false});
-    canvas.addEventListener(ev, handleJump, {passive:false});
-  });
-
-  // ===== Fullscreen / Immersive =====
+  // ===== Fullscreen (safe) =====
   async function enterImmersive(){
     immersive = true;
     document.body.classList.add('immersive');
-    if(isCoarse()){ MOBILE_SCALE = 0.9; resizePlayerOnly(); } // 더 크게
+    if(isCoarse()){ MOBILE_SCALE = 0.9; resizePlayerOnly(); }
     fitCanvas();
-    const el = document.documentElement;
     try{
+      const el=document.documentElement;
       if(el.requestFullscreen){ await el.requestFullscreen({navigationUI:'hide'}); }
       else if(el.webkitRequestFullscreen){ el.webkitRequestFullscreen(); }
-    }catch(e){ /* ignore */ }
+    }catch(_){ /* ignore permission errors */ }
   }
   async function exitImmersive(){
     immersive=false;
     document.body.classList.remove('immersive');
-    if(isCoarse()){ MOBILE_SCALE = 0.82; resizePlayerOnly(); }
+    if(isCoarse()){ MOBILE_SCALE = 0.86; resizePlayerOnly(); }
     fitCanvas();
     try{
       if(document.fullscreenElement && document.exitFullscreen){ await document.exitFullscreen(); }
       else if(document.webkitFullscreenElement && document.webkitExitFullscreen){ document.webkitExitFullscreen(); }
-    }catch(e){ /* ignore */ }
+    }catch(_){}
   }
   $('#immersiveBtn').addEventListener('click', enterImmersive);
-  $('#enterImmersiveBtn').addEventListener('click', ()=>{ start(); enterImmersive(); });
-  $('#exitImmersiveBtn').addEventListener('click', exitImmersive);
+  $('#exitImmersiveBtn') && $('#exitImmersiveBtn').addEventListener('click', exitImmersive);
 
   // ===== Game state =====
   const GROUND_H=56;
@@ -232,45 +217,28 @@
   const scoreEl=$('#score'), bestEl=$('#best'), comboEl=$('#combo');
   const livesTextEl=$('#livesText'), livesNumEl=$('#livesNum');
   const shieldPill=$('#shieldPill'), shieldTimeEl=$('#shieldTime');
-  const toastEl=$('#toast'), comboPopEl=$('#comboPop'), diffLabel=$('#diffLabel');
   const startOverlay=$('#startOverlay'), gameOverOverlay=$('#gameOverOverlay');
-  const startBtn=$('#startBtn'), retryBtn=$('#retryBtn'), changeCharBtn=$('#changeCharBtn'), changeDiffBtn=$('#changeDiffBtn');
-  const pauseBtn=$('#pauseBtn'), muteBtn=$('#muteBtn');
-  const homeLogo=$('#homeLogo');
-
+  const pauseBtn=$('#pauseBtn');
   const CHAR_SET=['🐡','🐈','🦛','🦉','🐘','🦔','🐖'];
   let selectedChar = localStorage.getItem('mc_runner_char') || '🐡';
   let selectedDiff = localStorage.getItem('mc_runner_diff') || 'normal';
-  const charGrid=document.querySelector('.char-grid');
-  const diffButtons=[...document.querySelectorAll('.diff-btn')];
+  const charGrid=document.querySelector('.char-grid'); const diffButtons=[...document.querySelectorAll('.diff-btn')];
 
   function buildCharGrid(){
+    if(!charGrid) return;
     charGrid.innerHTML='';
     CHAR_SET.forEach(ch=>{
       const b=document.createElement('button');
       b.className='char-btn'; b.type='button'; b.textContent=ch;
       b.setAttribute('aria-pressed', (ch===selectedChar).toString());
       b.addEventListener('click', ()=>{
-        selectedChar=ch; localStorage.setItem('mc_runner_char', ch);
-        [...charGrid.children].forEach(x=>x.setAttribute('aria-pressed','false'));
+        selectedChar=ch; try{ localStorage.setItem('mc_runner_char', ch); }catch(_){}
+        ;[...charGrid.children].forEach(x=>x.setAttribute('aria-pressed','false'));
         b.setAttribute('aria-pressed','true');
       });
       charGrid.appendChild(b);
     });
   }
-  function initDiffButtons(){
-    diffButtons.forEach(btn=>{
-      btn.setAttribute('aria-pressed', (btn.dataset.diff===selectedDiff).toString());
-      btn.addEventListener('click', ()=>{
-        selectedDiff = btn.dataset.diff; localStorage.setItem('mc_runner_diff', selectedDiff);
-        diffButtons.forEach(x=>x.setAttribute('aria-pressed','false'));
-        btn.setAttribute('aria-pressed','true');
-        diffLabel.textContent = DIFF_PRESETS[selectedDiff]?.label || '중';
-      });
-    });
-  }
-
-  // Difficulty
   const DIFF_PRESETS = {
     easy:   { label:'하', speedSlope:0.35, speedMax:8.5, diffSlope:0.028, diffMax:0.8, burst:0.08, coinMul:1.6, heartMul:0.8, starMul:0.9, aggression:0.6 },
     normal: { label:'중', speedSlope:0.45, speedMax:10.0, diffSlope:0.035, diffMax:1.0, burst:0.12, coinMul:2.5, heartMul:4.0, starMul:5.0, aggression:1.0 },
@@ -278,20 +246,34 @@
   };
   function getPreset(){ return DIFF_PRESETS[selectedDiff] || DIFF_PRESETS.normal; }
   function diffFactor(t){ const p=getPreset(); return 1 + Math.min(p.diffMax, t*p.diffSlope); }
+  function initDiffButtons(){
+    diffButtons.forEach(btn=>{
+      btn.setAttribute('aria-pressed', (btn.dataset.diff===selectedDiff).toString());
+      btn.addEventListener('click', ()=>{
+        selectedDiff = btn.dataset.diff;
+        try{ localStorage.setItem('mc_runner_diff', selectedDiff); }catch(_){}
+        diffButtons.forEach(x=>x.setAttribute('aria-pressed','false'));
+        btn.setAttribute('aria-pressed','true');
+        const dl=$('#diffLabel'); if(dl) dl.textContent = DIFF_PRESETS[selectedDiff]?.label || '중';
+      });
+    });
+  }
 
   // HUD
   let running=false, paused=false, over=false;
-  let score=0, best=Number(localStorage.getItem('mc_runner_best')||0); bestEl && (bestEl.textContent=best);
+  let score=0, best=Number((()=>{ try{return localStorage.getItem('mc_runner_best')}catch(_){return 0} })()||0);
+  if(bestEl) bestEl.textContent=best;
   let combo=1, lastCoinTime=0;
   let lives=3, maxLives=5, invulHit=0, invulPower=0;
-  function livesHUD(){ livesTextEl.textContent = '❤️'.repeat(lives) + '🤍'.repeat(Math.max(0, maxLives - lives)); livesNumEl.textContent = `(${lives})`; }
-  function shieldHUD(){ if(invulPower>0){ shieldPill.style.display='inline-flex'; shieldTimeEl.textContent = invulPower.toFixed(1)+'s'; } else { shieldPill.style.display='none'; } }
-  function updateHUD(){ scoreEl.textContent=Math.floor(score); comboEl.textContent='x'+combo; livesHUD(); shieldHUD(); }
+  function livesHUD(){ if(livesTextEl) livesTextEl.textContent = '❤️'.repeat(lives) + '🤍'.repeat(Math.max(0, maxLives - lives)); if(livesNumEl) livesNumEl.textContent = `(${lives})`; }
+  function shieldHUD(){ if(!shieldPill||!shieldTimeEl) return; if(invulPower>0){ shieldPill.style.display='inline-flex'; shieldTimeEl.textContent = invulPower.toFixed(1)+'s'; } else { shieldPill.style.display='none'; } }
+  function updateHUD(){ if(scoreEl) scoreEl.textContent=Math.floor(score); if(comboEl) comboEl.textContent='x'+combo; livesHUD(); shieldHUD(); }
+  function showCombo(){ const el=$('#comboPop'); if(!el) return; el.textContent=`COMBO x${combo}!`; el.classList.add('show'); clearTimeout(showCombo._t); showCombo._t=setTimeout(()=>el.classList.remove('show'),800); }
 
-  // Spawners (mobile scale)
+  // Spawners
   let obsTimer=0, coinTimer=0, heartTimer=0, starTimer=0;
   function spawnObstacle(){
-    const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H, s=MOBILE_SCALE;
+    const H=canvas.height/(window.devicePixelRatio||1), groundY=H-GROUND_H, s=MOBILE_SCALE;
     const df = diffFactor(time); const p = getPreset(); const ag = p.aggression;
     const h=Math.max(22*s, Math.min(112*s, (24 + Math.random()*(78 + (df-1)*10*ag))*s));
     const w=Math.max(18*s, Math.min(82*s, (22 + Math.random()*(46 + (df-1)*8*ag))*s));
@@ -299,21 +281,21 @@
     if(r< (0.12*ag)){
       const amp = (6 + Math.random()* (12 + 4*(ag-1))) * 0.9;
       const spd = 1.6 + Math.random()* (2.6 + 0.8*(ag-1));
-      obstacles.push({x:canvas.width/window.devicePixelRatio + w, y:groundY-h, w, h, passed:false, color:'#23242a', type:'float', a:amp, s:spd, t:0});
+      obstacles.push({x:canvas.width/(window.devicePixelRatio||1) + w, y:groundY-h, w, h, passed:false, color:'#23242a', type:'float', a:amp, s:spd, t:0});
     }else if(r< (0.28*ag)){
       const baseGap = 28 + (1.6-df)*10 + (Math.random()*16-6);
       const gap = Math.max(16*s, Math.min(44*s, baseGap*(1 - 0.18*(ag-1))*s));
       const h2 = Math.max(22*s, Math.min(110*s, h + (Math.random()*24-10)));
-      obstacles.push({x:canvas.width/window.devicePixelRatio + w, y:groundY-h, w, h, passed:false, color:'#23242a', type:'normal'});
-      obstacles.push({x:canvas.width/window.devicePixelRatio + w + w + gap, y:groundY-h2, w:Math.max(20*s,Math.min(86*s,w+(Math.random()*14-6))), h:h2, passed:false, color:'#23242a', type:'normal'});
+      obstacles.push({x:canvas.width/(window.devicePixelRatio||1) + w, y:groundY-h, w, h, passed:false, color:'#23242a', type:'normal'});
+      obstacles.push({x:canvas.width/(window.devicePixelRatio||1) + w + w + gap, y:groundY-h2, w:Math.max(20*s,Math.min(86*s,w+(Math.random()*14-6))), h:h2, passed:false, color:'#23242a', type:'normal'});
     }else{
-      obstacles.push({x:canvas.width/window.devicePixelRatio + w, y:groundY-h, w, h, passed:false, color:'#23242a', type:'normal'});
+      obstacles.push({x:canvas.width/(window.devicePixelRatio||1) + w, y:groundY-h, w, h, passed:false, color:'#23242a', type:'normal'});
     }
   }
   function spawnCoin(){
-    const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H, size=26*MOBILE_SCALE;
+    const H=canvas.height/(window.devicePixelRatio||1), groundY=H-GROUND_H, size=26*MOBILE_SCALE;
     if(Math.random()<0.36){
-      const baseX = canvas.width/window.devicePixelRatio + 40, apexY = groundY - (110 + Math.random()*80), span = 120 + Math.random()*90;
+      const baseX = canvas.width/(window.devicePixelRatio||1) + 40, apexY = groundY - (110 + Math.random()*80), span = 120 + Math.random()*90;
       const n = 5 + (Math.random()*3|0);
       for(let i=0;i<n;i++){
         const u=i/(n-1), y= groundY - ( (1-(2*u-1)**2) * (groundY - apexY) );
@@ -321,21 +303,23 @@
       }
     }else{
       const y=groundY - (80 + Math.random()*100);
-      coins.push({x:canvas.width/window.devicePixelRatio + 40, y, r:size/2, name:courseNames[(Math.random()*courseNames.length)|0], collected:false});
+      coins.push({x:canvas.width/(window.devicePixelRatio||1) + 40, y, r:size/2, name:courseNames[(Math.random()*courseNames.length)|0], collected:false});
     }
   }
-  function spawnHeart(){ const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H, r=16*MOBILE_SCALE; hearts.push({x:canvas.width/window.devicePixelRatio + 42, y:groundY-(90+Math.random()*100), r, collected:false}); }
-  function spawnStar(){ const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H, r=16*MOBILE_SCALE; stars.push({x:canvas.width/window.devicePixelRatio + 52, y:groundY-(110+Math.random()*90), r, t:0, collected:false}); }
+  function spawnHeart(){ const H=canvas.height/(window.devicePixelRatio||1), groundY=H-GROUND_H, r=16*MOBILE_SCALE; hearts.push({x:canvas.width/(window.devicePixelRatio||1) + 42, y:groundY-(90+Math.random()*100), r, collected:false}); }
+  function spawnStar(){ const H=canvas.height/(window.devicePixelRatio||1), groundY=H-GROUND_H, r=16*MOBILE_SCALE; stars.push({x:canvas.width/(window.devicePixelRatio||1) + 52, y:groundY-(110+Math.random()*90), r, t:0, collected:false}); }
 
   // Input
   function doJump(){ if(!running || paused || over) return; if(player.jumpsLeft>0){ player.vy=-10.4; player.onGround=false; player.jumpsLeft--; } }
-  window.addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault(); doJump();} if(e.code==='KeyP'){ paused=!paused; updatePauseUI(); } }, {passive:false});
-  pauseBtn.addEventListener('click', ()=>{ paused=!paused; updatePauseUI(); });
-  $('#pauseFloatBtn').addEventListener('click', ()=>{ paused=!paused; updatePauseUI(); });
-  function updatePauseUI(){ pauseBtn.textContent = paused ? '▶️' : '⏸️'; }
-
-  let mute=true;
-  muteBtn.addEventListener('click', ()=>{ mute=!mute; muteBtn.textContent = mute ? '🔇' : '🔊'; });
+  try{
+    window.addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault(); doJump();} if(e.code==='KeyP'){ paused=!paused; if(pauseBtn) pauseBtn.textContent= paused?'▶️':'⏸️'; } }, {passive:false});
+  }catch(_){}
+  ;['pointerdown','touchstart','mousedown'].forEach(ev=>{
+    try{ touchLayer.addEventListener(ev, e=>{ e.preventDefault(); doJump(); }, {passive:false}); }catch(_){}
+    try{ canvas.addEventListener(ev, e=>{ e.preventDefault(); doJump(); }, {passive:false}); }catch(_){}
+  });
+  if(pauseBtn){ pauseBtn.addEventListener('click', ()=>{ paused=!paused; pauseBtn.textContent= paused?'▶️':'⏸️'; }); }
+  const pauseFloatBtn=$('#pauseFloatBtn'); if(pauseFloatBtn){ pauseFloatBtn.addEventListener('click', ()=>{ paused=!paused; if(pauseBtn) pauseBtn.textContent= paused?'▶️':'⏸️'; }); }
 
   // Helpers
   function rectsOverlap(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
@@ -343,7 +327,8 @@
 
   // Draw
   function draw(){
-    const W=canvas.width/window.devicePixelRatio, H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H;
+    const dpr=window.devicePixelRatio||1;
+    const W=canvas.width/dpr, H=canvas.height/dpr, groundY=H-GROUND_H;
     ctx.clearRect(0,0,W,H);
     ctx.globalAlpha=.08; ctx.fillStyle='#2a7cf7'; for(let i=0;i<6;i++){ const y=40+i*44+(time*speed*0.4+i*30)%44; ctx.fillRect(0,y,W,2);} ctx.globalAlpha=1;
     ctx.fillStyle='#e3e7ef'; ctx.fillRect(0,groundY,W,GROUND_H);
@@ -360,43 +345,40 @@
     ctx.restore();
   }
 
-  function showToast(msg){ const el=$('#toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>el.classList.remove('show'),1200); }
-  function showCombo(){ const el=$('#comboPop'); el.textContent=`COMBO x${combo}!`; el.classList.add('show'); clearTimeout(showCombo._t); showCombo._t=setTimeout(()=>el.classList.remove('show'),800); }
-
   // Flow
   let time=0, speed=4.2, baseSpeed=4.2;
-  function resizePlayerOnly(){ const H=canvas.height/window.devicePixelRatio; player.w=Math.round(46*MOBILE_SCALE); player.h=Math.round(52*MOBILE_SCALE); player.y=H-GROUND_H-player.h; }
+  function resizePlayerOnly(){ const dpr=window.devicePixelRatio||1; const H=canvas.height/dpr; player.w=Math.round(46*MOBILE_SCALE); player.h=Math.round(52*MOBILE_SCALE); player.y=H-GROUND_H-player.h; }
   function reset(full=true){
     running=false; paused=false; over=false; score=0; combo=1; time=0; speed=baseSpeed;
     lives=3; invulHit=0; invulPower=0; updateHUD();
-    const H=canvas.height/window.devicePixelRatio; player.y=H-GROUND_H-player.h; player.vy=0; player.onGround=true; player.jumpsLeft=2; player.facing=1;
+    const dpr=window.devicePixelRatio||1; const H=canvas.height/dpr; player.y=H-GROUND_H-player.h; player.vy=0; player.onGround=true; player.jumpsLeft=2; player.facing=1;
     if(full){ obstacles.length=0; coins.length=0; hearts.length=0; stars.length=0; obsTimer=0; coinTimer=0; heartTimer=8+Math.random()*10; starTimer=10+Math.random()*10; }
   }
-  function start(){ startOverlay.style.display='none'; reset(true); running=true; updatePauseUI(); }
-  function restart(){ gameOverOverlay.style.display='none'; reset(true); running=true; updatePauseUI(); }
-  $('#startBtn').addEventListener('click', start);
-  $('#retryBtn').addEventListener('click', restart);
-  $('#changeCharBtn').addEventListener('click', ()=>{ gameOverOverlay.style.display='none'; reset(false); buildCharGrid(); startOverlay.style.display=''; });
-  $('#changeDiffBtn').addEventListener('click', ()=>{ gameOverOverlay.style.display='none'; reset(false); initDiffButtons(); startOverlay.style.display=''; });
-  $('#homeLogo').addEventListener('click', ()=>{ startOverlay.style.display=''; reset(false); });
+  function start(){ if(startOverlay) startOverlay.style.display='none'; reset(true); running=true; }
+  function restart(){ if(gameOverOverlay) gameOverOverlay.style.display='none'; reset(true); running=true; }
+  $('#startBtn') && $('#startBtn').addEventListener('click', start);
+  $('#retryBtn') && $('#retryBtn').addEventListener('click', restart);
+  $('#changeCharBtn') && $('#changeCharBtn').addEventListener('click', ()=>{ if(gameOverOverlay) gameOverOverlay.style.display='none'; reset(false); buildCharGrid(); if(startOverlay) startOverlay.style.display=''; });
+  $('#changeDiffBtn') && $('#changeDiffBtn').addEventListener('click', ()=>{ if(gameOverOverlay) gameOverOverlay.style.display='none'; reset(false); initDiffButtons(); if(startOverlay) startOverlay.style.display=''; });
+  $('#homeLogo') && $('#homeLogo').addEventListener('click', ()=>{ if(startOverlay){ startOverlay.style.display=''; buildCharGrid(); initDiffButtons(); } });
 
-  // Start screen init
-  function toStart(){ startOverlay.style.display=''; buildCharGrid(); initDiffButtons(); $('#diffLabel').textContent=(DIFF_PRESETS[selectedDiff]||DIFF_PRESETS.normal).label; fitCanvas(); }
+  function toStart(){ buildCharGrid(); initDiffButtons(); const dl=$('#diffLabel'); if(dl) dl.textContent=(DIFF_PRESETS[selectedDiff]||DIFF_PRESETS.normal).label; fitCanvas(); }
   toStart();
 
   // Game over
   function gameOver(){
     over=true; running=false; paused=false;
     const final=Math.floor(score);
-    const prevBest=Number(localStorage.getItem('mc_runner_best')||0);
-    if(final>prevBest){ localStorage.setItem('mc_runner_best', String(final)); bestEl.textContent=final; } else { bestEl.textContent=prevBest; }
-    $('#finalText').innerHTML=`이번 점수 <b>${final}</b>`;
-    gameOverOverlay.style.display='';
+    let prevBest=0; try{ prevBest=Number(localStorage.getItem('mc_runner_best')||0);}catch(_){ prevBest=0;}
+    if(final>prevBest){ try{ localStorage.setItem('mc_runner_best', String(final)); }catch(_){} if(bestEl) bestEl.textContent=final; } else { if(bestEl) bestEl.textContent=prevBest; }
+    const ft=$('#finalText'); if(ft) ft.innerHTML=`이번 점수 <b>${final}</b>`;
+    if(gameOverOverlay) gameOverOverlay.style.display='';
   }
 
-  // Step
+  // Timers & step
+  let obsTimer=0, coinTimer=0, heartTimer=0, starTimer=0;
   function step(dt){
-    const H=canvas.height/window.devicePixelRatio, groundY=H-GROUND_H;
+    const dpr=window.devicePixelRatio||1; const H=canvas.height/dpr, groundY=H-GROUND_H;
     if(invulHit>0) invulHit=Math.max(0,invulHit-dt); if(invulPower>0) invulPower=Math.max(0,invulPower-dt);
     player.vy+=24*dt; player.y+=player.vy; if(player.y+player.h>=groundY){ player.y=groundY-player.h; player.vy=0; if(!player.onGround){ player.onGround=true; player.jumpsLeft=2; } }
     const df = diffFactor(time);
@@ -412,9 +394,11 @@
 
     for(let i=obstacles.length-1;i>=0;i--){
       const o=obstacles[i]; if(o.type==='float'){ o.t=(o.t||0)+dt*o.s; o.y+=Math.sin(o.t)*0.7; } o.x-=speed;
-      if(rectsOverlap(player,o)){ if(invulPower>0){ } else if(invulHit<=0){ lives=Math.max(0, lives-1); invulHit=1.0; if(lives<=0){ gameOver(); break; } } }
-      if(!o.passed && o.x + o.w < player.x){ o.passed=true; score+=3; }
       if(o.x+o.w<-10) obstacles.splice(i,1);
+      if(!o.passed && o.x + o.w < player.x){ o.passed=true; score+=3; }
+      if(player.x<o.x+o.w && player.x+player.w>o.x && player.y<o.y+o.h && player.y+player.h>o.y){
+        if(invulPower<=0){ lives=Math.max(0, lives-1); invulHit=1.0; if(lives<=0){ gameOver(); } }
+      }
     }
     for(let i=coins.length-1;i>=0;i--){
       const c=coins[i]; c.x-=speed; if(circleRectOverlap(c, player)){ coins.splice(i,1); const now=performance.now(); combo=(now-lastCoinTime<2500)?(combo+1):1; lastCoinTime=now; score+=10*combo; showCombo(); }
@@ -428,6 +412,7 @@
       const s=stars[i]; s.t=(s.t||0)+dt; s.x-=speed*1.03; s.y+=Math.sin(s.t*3.8)*0.55; if(circleRectOverlap(s, player)){ stars.splice(i,1); invulPower = invulPower>0 ? Math.min(invulPower+3,10) : 6; }
       else if(s.x+s.r<-10) stars.splice(i,1);
     }
+    // facing
     let nearest=null, nd=1e9; for(const o of obstacles){ const d=Math.abs((o.x+o.w/2)-(player.x+player.w/2)); if(d<nd){ nd=d; nearest=o; } }
     player.facing = nearest ? (((nearest.x + nearest.w/2) >= (player.x + player.w/2)) ? 1 : -1) : 1;
     const p=getPreset(); time+=dt; speed=Math.min(4.2 + time*p.speedSlope*df, p.speedMax); score+=dt*(1.2 + (df-1)*0.35); updateHUD();
@@ -436,10 +421,12 @@
   // Loop
   let last=performance.now();
   function loop(now){
-    requestAnimationFrame(loop);
-    const dt=Math.max(0, Math.min((now-last)/1000, 0.033)); last=now;
-    if(!running||paused||over){ draw(); return; }
-    step(dt); draw();
+    try{
+      requestAnimationFrame(loop);
+      const dt=Math.max(0, Math.min((now-last)/1000, 0.033)); last=now;
+      if(!running||paused||over){ draw(); return; }
+      step(dt); draw();
+    }catch(_){ /* swallow to avoid fatal stops in locked environments */ }
   }
   requestAnimationFrame(loop);
 })();
