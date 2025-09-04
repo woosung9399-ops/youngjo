@@ -84,19 +84,18 @@
     .lives{display:flex; gap:4px; font-size:18px; align-items:center}
     .invTag{display:inline-flex; align-items:center; gap:6px; padding:2px 8px; border-radius:999px; background:#fff3bf; border:1px solid #ffe58f; font-size:12px; color:#7c5b00}
 
-    /* MC logo */
+    /* MC logo (이미지 버전, 32px 고정) */
     .mc-logo{
-      position:absolute; left:12px; top: calc(env(safe-area-inset-top) + 10px);
-      z-index: 20; pointer-events: none;
-      font-weight:900; letter-spacing:0.5px; display:inline-flex; align-items:flex-end; gap:2px;
-      color:#111827; user-select:none; text-rendering: optimizeLegibility;
-    }
-    .mc-logo .txt{font-size:18px}
-    .mc-logo .i{position:relative; display:inline-block}
-    .mc-logo .i::after{
-      content:""; position:absolute; left:50%; transform:translateX(-50%);
-      top:-7px; width:7px; height:7px; border-radius:50%; background:var(--accent);
-      box-shadow:0 0 6px rgba(255,122,23,0.35);
+      position:absolute;
+      left:12px;
+      top: calc(env(safe-area-inset-top) + 10px);
+      z-index:20;
+      height:32px;       /* 요청: 32px 고정 */
+      width:auto;        /* 비율 유지 */
+      pointer-events:none;
+      object-fit:contain;
+      image-rendering:auto;
+      user-select:none;
     }
 
     /* Game Over */
@@ -116,9 +115,8 @@
   <div id="gameWrap">
     <canvas id="game"></canvas>
 
-    <div class="mc-logo" aria-label="멀티캠퍼스 로고(텍스트)">
-      <span class="txt">mult</span><span class="txt i">i</span><span class="txt">campus</span>
-    </div>
+    <!-- 교체된 멀티캠퍼스 로고 -->
+    <img class="mc-logo" src="https://api.multicampus.com/ssf/v1/resource/public/images/FILBS202506207041267" alt="Multicampus" />
 
     <div class="cornerHUD" id="hud" style="display:none">
       <div class="row">
@@ -137,7 +135,7 @@
       </div>
     </div>
 
-    <div class="touchHint">모바일: © multicampus arcade</div>
+    <div class="touchHint">모바일: 화면 탭으로 점프 (이단 점프)</div>
 
     <!-- Start Screen -->
     <div class="overlay" id="startScreen">
@@ -410,7 +408,7 @@
       obstacles.forEach(ob=>{ ob.x -= current.speed * dt; });
       items.forEach(it=>{ it.x -= current.speed * dt * 0.95; }); // items slightly slower
 
-      // remove offscreen
+      // remove offscreen & pass check
       for(let i=obstacles.length-1;i>=0;i--){
         const ob = obstacles[i];
         if(!ob.passed && (ob.x + ob.w) < player.x){ ob.passed = true; onPassObstacle(); }
@@ -442,7 +440,7 @@
           if (px < ob.x + ob.w && px + pw > ob.x && py < ob.y + ob.h && py + ph > ob.y){
             if(player.lives > 0){
               player.lives -= 1;
-              player.hitIFrames = 1.0; // after hit invincibility
+              player.hitIFrames = 1.0; // after-hit brief i-frames
               break;
             }else{
               endGame(); break;
@@ -495,9 +493,12 @@
     }
 
     // Controls
-    function onJump(e){ player.jump(); e && e.preventDefault(); }
-    window.addEventListener('keydown', (e)=>{ if(e.code==="Space" || e.code==="ArrowUp"){ onJump(e); } });
-    canvas.addEventListener('touchstart', (e)=>{ onJump(e); }, {passive:false});
+    function onJump(e){ player.jump(); if(e){ e.preventDefault(); } }
+    window.addEventListener('keydown', (e)=>{ if(e.code==="Space" || e.code==="ArrowUp"){ onJump(e); } }, {passive:false});
+    // 모바일 탭/드래그 시 스크롤 방지
+    ['touchstart','touchmove'].forEach(evt=>{
+      canvas.addEventListener(evt, (e)=>{ onJump(e); }, {passive:false});
+    });
     canvas.addEventListener('mousedown', (e)=>{ onJump(e); });
 
     // ---------- UI Wiring ----------
@@ -578,7 +579,11 @@
           <tbody>${rows}</tbody>
         </table>`;
     }
-    function escapeHtml(str){ return (str+"").replace(/[&<>"']/g, s=>({ "&":"&amp;","<":"&lt;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[s])); }
+    function escapeHtml(str){
+      return (str+"").replace(/[&<>"']/g, s=>({
+        "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+      }[s]));
+    }
 
     document.getElementById('btnShowRank').addEventListener('click', ()=>{
       if(rankListStart.style.display==='none'){ rankTableHtml('rankListStart'); rankListStart.style.display='block'; }
