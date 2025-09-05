@@ -43,17 +43,18 @@
     .grid{display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr));}
     .charBtn{
       display:flex; align-items:center; justify-content:center;
-      padding:clamp(10px, 3.2vw, 14px) 0; font-size:clamp(28px, 6.4vw, 32px);
+      padding:clamp(10px, 3.2vw, 14px) 0;
       border-radius:12px; border:1px solid var(--line);
       background:#fff; cursor:pointer; transition: all .15s ease;
       user-select:none; box-shadow:0 2px 6px var(--shadow);
     }
+    .charBtn img{width:clamp(28px, 6.4vw, 32px); height:clamp(28px, 6.4vw, 32px)}
     .charBtn[data-selected="true"]{outline:2px solid var(--accent); transform: translateY(-2px); background:#fff6ef;}
     .row{display:flex; gap:12px; align-items:center; flex-wrap:wrap;}
     .row + .row{margin-top:10px}
     .tag{font-size:12px; padding:6px 10px; background:#f8fafc; border:1px solid var(--line); border-radius:999px; color:#111827;}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:#fff; box-shadow:0 1px 4px var(--shadow)}
-    label{display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-weight:600}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;border:1px solid var(--line);background:#fff; box-shadow:0 1px 4px var(--shadow); font-weight:600}
+    label{display:inline-flex; align-items:center; gap:8px; cursor:pointer}
     input[type="radio"]{accent-color:var(--accent); width:18px; height:18px;}
     .actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px}
     .btn{
@@ -93,41 +94,26 @@
     .soundToggle button{ background:none; border:none; font:inherit; cursor:pointer; }
     .soundToggle .icon{font-size:18px}
 
-    /* MC logo */
-    .mc-logo{
+    /* MC logo IMG (32px) */
+    .mc-logo-img{
       position:absolute; left:12px; top: calc(env(safe-area-inset-top) + 10px);
-      z-index: 20; pointer-events: none;
-      font-weight:900; letter-spacing:0.5px; display:inline-flex; align-items:flex-end; gap:2px;
-      color:#111827; user-select:none; text-rendering: optimizeLegibility;
-    }
-    .mc-logo .txt{font-size:18px}
-    .mc-logo .i{position:relative; display:inline-block}
-    .mc-logo .i::after{
-      content:""; position:absolute; left:50%; transform:translateX(-50%);
-      top:-7px; width:7px; height:7px; border-radius:50%; background:var(--accent);
-      box-shadow:0 0 6px rgba(255,122,23,0.35);
+      z-index: 20; pointer-events:none;
+      width:32px; height:32px; object-fit:contain; image-rendering:auto;
+      -webkit-user-drag:none; user-select:none;
     }
 
     /* Game Over */
     .goWrap .score{font-size:40px; font-weight:800; margin:6px 0 12px}
     .goWrap input[type="text"]{width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--line); background:#fff; color:#0b1020;}
     .footnote{font-size:12px; color:#6b7280; margin-top:6px}
-    /* Touch hint */
-    .touchHint{position:absolute; right:12px; bottom:12px; z-index:5; font-size:12px; color:#4b5563; background:rgba(255,255,255,0.85); padding:6px 10px; border-radius:999px; border:1px solid var(--line); backdrop-filter: blur(4px);}
-    /* Combo badge */
-    .comboBadge{
-      display:inline-flex; align-items:center; gap:8px; padding:4px 8px; border-radius:999px;
-      background:#fff1e6; border:1px solid #ffd9b8; color:#a64b00; font-weight:800;
-    }
   </style>
 </head>
 <body>
   <div id="gameWrap">
     <canvas id="game"></canvas>
 
-    <div class="mc-logo" aria-label="멀티캠퍼스 로고(텍스트)">
-      <span class="txt">mult</span><span class="txt i">i</span><span class="txt">campus</span>
-    </div>
+    <!-- 멀티캠퍼스 이미지 로고 (32px) -->
+    <img class="mc-logo-img" alt="multicampus" src="https://api.multicampus.com/ssf/v1/resource/public/images/FILBS202506207041267"/>
 
     <div class="soundToggle"><span class="icon" id="soundIcon">🔊</span><button id="btnSound">사운드 ON</button></div>
 
@@ -143,12 +129,9 @@
       </div>
       <div class="row">
         <div class="lives" id="hudLives" title="라이프(❤️)"></div>
-        <span class="comboBadge" id="comboBadge" style="display:none">COMBO x<span id="comboX">1</span></span>
         <span class="invTag" id="invTag" style="display:none">🛡 무적 <span id="invLeft">3.0</span>s</span>
       </div>
     </div>
-
-    <div class="touchHint">ⓒmuiticampus arcade</div>
 
     <!-- Start Screen -->
     <div class="overlay" id="startScreen">
@@ -198,6 +181,33 @@
 
   <script>
   (()=>{
+    // ---------- Emoji → Twemoji image (cross-platform) ----------
+    // Uses jsDelivr Twemoji assets (SVG). Draws images on canvas instead of emoji text.
+    const TWEMOJI_BASE = "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/";
+    function toCodePoints(str){
+      const cps = [];
+      for (let i = 0; i < str.length; i++){
+        const code = str.codePointAt(i);
+        cps.push(code.toString(16));
+        if (code > 0xffff) i++;
+      }
+      // Keep VS16 (fe0f) when present to force emoji variant
+      return cps.join("-");
+    }
+    function emojiUrl(emoji){ return TWEMOJI_BASE + toCodePoints(emoji) + ".svg"; }
+
+    const imageCache = new Map();
+    function loadEmojiImage(emoji){
+      const key = emoji;
+      if (imageCache.has(key)) return imageCache.get(key);
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.decoding = "async";
+      img.src = emojiUrl(emoji);
+      imageCache.set(key, img);
+      return img;
+    }
+
     // ---------- Simple SFX using Web Audio ----------
     const SFX = (()=>{
       let ctx = null, master = null, muted = false, started = false;
@@ -249,9 +259,7 @@
         const data = buffer.getChannelData(0);
         for(let i=0;i<bufferSize;i++){
           let v = Math.random()*2-1;
-          if(type==="brown"){
-            v = (data[i-1]||0)*0.98 + v*0.02; // crude brown
-          }
+          if(type==="brown"){ v = (data[i-1]||0)*0.98 + v*0.02; }
           data[i] = v;
         }
         const src = ctx.createBufferSource();
@@ -261,57 +269,17 @@
         src.connect(g).connect(out).connect(master);
         src.start(t);
       }
-
-      // Public SFX
       const api = {
-        initFromGesture(){
-          if(started) return;
-          started = true;
-          ensure();
-          // subtle start chime
-          api.startChime();
-        },
-        setMuted(m){
-          muted = !!m;
-          try{ localStorage.setItem(STORAGE_MUTE, muted ? "1":"0"); }catch(e){}
-        },
-        getMuted(){
-          if(muted) return true;
-          try{ muted = localStorage.getItem(STORAGE_MUTE)==="1"; }catch(e){}
-          return muted;
-        },
-        startChime(){
-          tone({type:"triangle", f0:440, f1:660, dur:0.12, vol:0.8});
-          tone({type:"triangle", f0:660, f1:880, dur:0.12, vol:0.7, when:0.08});
-        },
-        jump(primary=true){
-          // primary jump: upward blip; double jump: sharper
-          if(primary){
-            tone({type:"square", f0:520, f1:780, dur:0.09, vol:0.7});
-          }else{
-            tone({type:"square", f0:780, f1:1100, dur:0.08, vol:0.75});
-          }
-        },
-        pass(combo=0){
-          // small click rising with combo
-          const base = 420 + Math.min(combo, 12)*22;
-          tone({type:"sine", f0:base, f1:base*1.3, dur:0.06, vol:0.55});
-        },
-        pickupLife(){
-          tone({type:"triangle", f0:620, f1:880, dur:0.1, vol:0.7});
-          tone({type:"triangle", f0:880, f1:1240, dur:0.1, vol:0.6, when:0.07});
-        },
-        pickupInv(){
-          tone({type:"sawtooth", f0:360, f1:980, dur:0.18, vol:0.65});
-        },
-        hit(){
-          noise({dur:0.08, vol:0.5, type:"brown"});
-          tone({type:"sine", f0:160, f1:80, dur:0.12, vol:0.6});
-        },
-        gameOver(){
-          tone({type:"triangle", f0:440, f1:330, dur:0.18, vol:0.7});
-          tone({type:"triangle", f0:330, f1:220, dur:0.18, vol:0.6, when:0.12});
-        }
+        initFromGesture(){ if(started) return; started = true; ensure(); api.startChime(); },
+        setMuted(m){ muted = !!m; try{ localStorage.setItem(STORAGE_MUTE, muted ? "1":"0"); }catch(e){} },
+        getMuted(){ if(muted) return true; try{ muted = localStorage.getItem(STORAGE_MUTE)==="1"; }catch(e){} return muted; },
+        startChime(){ tone({type:"triangle", f0:440, f1:660, dur:0.12, vol:0.8}); tone({type:"triangle", f0:660, f1:880, dur:0.12, vol:0.7, when:0.08}); },
+        jump(primary=true){ primary ? tone({type:"square", f0:520, f1:780, dur:0.09, vol:0.7}) : tone({type:"square", f0:780, f1:1100, dur:0.08, vol:0.75}); },
+        pass(combo=0){ const base = 420 + Math.min(combo, 12)*22; tone({type:"sine", f0:base, f1:base*1.3, dur:0.06, vol:0.55}); },
+        pickupLife(){ tone({type:"triangle", f0:620, f1:880, dur:0.1, vol:0.7}); tone({type:"triangle", f0:880, f1:1240, dur:0.1, vol:0.6, when:0.07}); },
+        pickupInv(){ tone({type:"sawtooth", f0:360, f1:980, dur:0.18, vol:0.65}); },
+        hit(){ noise({dur:0.08, vol:0.5, type:"brown"}); tone({type:"sine", f0:160, f1:80, dur:0.12, vol:0.6}); },
+        gameOver(){ tone({type:"triangle", f0:440, f1:330, dur:0.18, vol:0.7}); tone({type:"triangle", f0:330, f1:220, dur:0.18, vol:0.6, when:0.12}); }
       };
       return api;
     })();
@@ -342,8 +310,6 @@
     const hudDiff = document.getElementById('hudDiff');
     const hudChar = document.getElementById('hudChar');
     const hudCombo = document.getElementById('hudCombo');
-    const comboBadge = document.getElementById('comboBadge');
-    const comboX = document.getElementById('comboX');
     const hudLives = document.getElementById('hudLives');
     const invTag = document.getElementById('invTag');
     const invLeftEl = document.getElementById('invLeft');
@@ -370,10 +336,8 @@
     const player = {
       x: 120, y: 0, w: 56, h: 56, vy: 0, onGround: false, emoji: DEFAULT_EMOJI, facingRight: true,
       jumpsLeft: 2,
-      lives: 2, // 시작 목숨 2
-      maxLives: 3,
-      inv: 0, // seconds
-      hitIFrames: 0, // post-hit 1s 무적
+      lives: 2, maxLives: 3,
+      inv: 0, hitIFrames: 0,
       update(dt){
         this.vy += gravity * dt;
         this.y += this.vy * dt;
@@ -396,12 +360,19 @@
         return false;
       },
       draw(){
+        // Draw Twemoji image for cross-platform consistency
+        const img = loadEmojiImage(this.emoji);
         const x = this.x, y = this.y;
-        const fontSize = 56;
-        ctx.font = `${fontSize}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-        ctx.textBaseline = 'top';
-        const tx = x + this.w/2;
-        const ty = y;
+        const sizeW = this.w, sizeH = this.h;
+        ctx.save();
+        if(this.facingRight){
+          ctx.translate(x + sizeW/2, y);
+          ctx.scale(-1, 1);
+          if(img.complete) ctx.drawImage(img, -sizeW/2, 0, sizeW, sizeH);
+        } else {
+          if(img.complete) ctx.drawImage(img, x, y, sizeW, sizeH);
+        }
+        ctx.restore();
 
         // invincibility aura
         if(this.inv > 0 || this.hitIFrames > 0){
@@ -410,20 +381,10 @@
           ctx.strokeStyle = "rgba(255, 209, 102, 0.9)";
           ctx.lineWidth = 6;
           ctx.beginPath();
-          ctx.arc(tx, ty + this.h/2, 36, 0, Math.PI*2);
+          ctx.arc(x + sizeW/2, y + sizeH/2, 36, 0, Math.PI*2);
           ctx.stroke();
           ctx.restore();
         }
-
-        ctx.save();
-        if(this.facingRight){
-          ctx.translate(tx, ty);
-          ctx.scale(-1, 1);
-          ctx.fillText(this.emoji, -this.w/2, 0);
-        }else{
-          ctx.fillText(this.emoji, x, y);
-        }
-        ctx.restore();
       }
     };
 
@@ -436,20 +397,21 @@
       obstacles.push({x: W + 20, y, w: width, h: baseH, passed:false});
     }
 
-    // Items
-    const items = []; // {type:'life'|'inv', emoji:'❤️'|'🪨', x,y,w,h}
+    // Items (❤️ life, 🪨 invincibility)
+    const items = [];
+    const ITEM_EMOJI = { life: "❤️", inv: "🪨" };
     function spawnItem(type){
-      const emoji = (type==='life') ? '❤️' : '🪨';
       const size = 40;
       const minY = H - groundH - 160;
       const maxY = H - groundH - 60;
       const y = Math.max(0, Math.min(maxY, minY + Math.random()*(maxY-minY)));
-      items.push({type, emoji, x: W + 20, y, w: size, h: size});
+      items.push({type, x: W + 20, y, w: size, h: size});
     }
     function drawItems(){
-      ctx.font = `40px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
-      ctx.textBaseline = 'top';
-      items.forEach(it=>{ ctx.fillText(it.emoji, it.x, it.y); });
+      items.forEach(it=>{
+        const img = loadEmojiImage(ITEM_EMOJI[it.type]);
+        if(img.complete) ctx.drawImage(img, it.x, it.y, it.w, it.h);
+      });
     }
 
     function resetGame(){
@@ -460,7 +422,7 @@
       combo = 0; comboTimer = 0;
       player.y = H - groundH - player.h;
       player.vy = 0; player.jumpsLeft = 2;
-      player.lives = 2; // 시작 목숨 2
+      player.lives = 2;
       player.inv = 0; player.hitIFrames = 0;
     }
 
@@ -491,8 +453,6 @@
       comboTimer = COMBO_WINDOW;
       const bonus = current.passBonus + combo * 10;
       score += bonus;
-      comboBadge.style.display = combo > 0 ? 'inline-flex' : 'none';
-      comboX.textContent = String(combo);
       SFX.pass(combo);
     }
 
@@ -518,8 +478,6 @@
     function endGame(){
       running = false;
       hud.style.display = 'none';
-      comboBadge.style.display = 'none';
-      invTag.style.display = 'none';
       finalScoreEl.textContent = Math.floor(score);
       finalMetaEl.textContent = `난이도 ${labelOf(diff)} · 캐릭터 ${player.emoji} · 최고 콤보 x${combo}`;
       SFX.gameOver();
@@ -567,7 +525,7 @@
       // combo decay
       if(combo > 0){
         comboTimer -= dt;
-        if(comboTimer <= 0){ combo = 0; comboBadge.style.display = 'none'; }
+        if(comboTimer <= 0){ combo = 0; }
       }
 
       // collisions
@@ -609,7 +567,6 @@
         ctx.fillStyle = grad; ctx.fillRect(ob.x, ob.y, ob.w, ob.h);
         ctx.fillStyle = "rgba(0,0,0,0.06)"; ctx.fillRect(ob.x, ob.y+ob.h, ob.w, 6);
       });
-      // items & player
       drawItems();
       player.draw();
 
@@ -642,15 +599,23 @@
     // ---------- UI Wiring ----------
     const charGrid = document.getElementById('charGrid');
     let selectedIdx = 0;
+
     function renderCharGrid(){
       charGrid.innerHTML = "";
       EMOJIS.forEach((emj, idx)=>{
         const btn = document.createElement('button');
         btn.className = 'charBtn';
         btn.type = 'button';
-        btn.textContent = emj;
         btn.dataset.selected = (idx===selectedIdx) ? "true" : "false";
         btn.setAttribute('aria-pressed', idx===selectedIdx ? 'true' : 'false');
+
+        // Show Twemoji image in the picker too (for full cross-platform consistency)
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = emojiUrl(emj);
+        img.alt = emj;
+        btn.appendChild(img);
+
         btn.addEventListener('click', ()=>{
           selectedIdx = idx;
           selectedEmoji = EMOJIS[selectedIdx];
